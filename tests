@@ -1,0 +1,83 @@
+import time
+import sys
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from win10toast import ToastNotifier
+import customtkinter as ctk
+
+# HyperParameters:
+#----------------------------------------
+SLEEP_TIME = 60
+USERNAME = "prnyp"
+#----------------------------------------
+
+options = Options()
+options.add_argument("--headless")
+
+# UI features
+ctk.set_appearance_mode("dark")
+app = ctk.CTk()
+app.geometry("400x300")
+app.title("Improved Chess Detector")
+
+label = ctk.CTkLabel(app, text="Enter Chess.com Username:")
+label.pack(pady=10)
+
+entry = ctk.CTkEntry(app, placeholder_text="e.g., MagnusCarlsen")
+entry.pack(pady=10)
+
+def track():
+    ctk.CTkLabel(app, text=f"Tracking {entry.get()}...").pack()
+
+
+# define the ChromeDriver service first
+service = Service()  # optional: add executable_path="path/to/chromedriver" if needed
+notifier = ToastNotifier()
+online = False
+obtained = False
+wasOnline = False
+
+# open Chrome
+def mainProgram():
+    while True:
+        with webdriver.Chrome(service=service, options=options) as driver:
+            driver.get(f"https://www.chess.com/member/{USERNAME}")
+            print(driver.title)
+            paragraphs = driver.find_elements(By.CLASS_NAME, "profile-header-details-item")
+            obtained = False
+            for p in paragraphs:
+                # doesnt repeat if I already got what I needed
+                if obtained:
+                    break
+
+                if p.text.strip().startswith("Last Online"):
+                    print(p.text)
+                    obtained = True
+                    online = False
+                    if wasOnline:
+                        notifier.show_toast("Chess Detector Notification", USERNAME + " is no longer online")
+                        wasOnline = False
+                elif p.text.strip().startswith("Online now"):
+                    print(p.text)
+                    obtained = True
+                    online = True
+                    if not wasOnline:
+                        notifier.show_toast("Chess Detector Notification", USERNAME + " is " + p.text)
+                    wasOnline = True
+                # print(p.text)
+                if obtained:
+                    with open("page.html", "a", encoding="utf-8") as f:
+                        f.write(p.text + "\n")
+        
+        for i in range(SLEEP_TIME, 0, -1):
+            sys.stdout.write(f"\rChecking again in {i} seconds...   ")
+            sys.stdout.flush()
+            time.sleep(1)
+        print("\nChecking...")
+
+button = ctk.CTkButton(app, text="Start Tracking", command=mainProgram)
+button.pack(pady=10)
+
+app.mainloop()
