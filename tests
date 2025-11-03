@@ -1,60 +1,141 @@
 import time
 import sys
-from selenium import webdriver
+from selenium import webdriver # emulates a webpage and uses that to scan chess.com's html code
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from win10toast import ToastNotifier
+from win10toast import ToastNotifier # notification service
+import customtkinter as ctk # used for the GUI
+import threading # for running programs in the background (prevents the window from freezing while the program runs)
+import webview # used to display the chess.com website (hopefully)
 
 # HyperParameters:
 #----------------------------------------
 SLEEP_TIME = 60
-USERNAME = "MagnusCarlsen"
 #----------------------------------------
 
 options = Options()
 options.add_argument("--headless")
 
+# UI features
+ctk.set_appearance_mode("dark")
+app = ctk.CTk()
+app.geometry("400x300")
+app.title("Improved Chess Detector")
+
+label = ctk.CTkLabel(app, text="Enter Chess.com Username:")
+label.pack(pady=10)
+
+entry = ctk.CTkEntry(app, placeholder_text="e.g., MagnusCarlsen")
+entry.pack(pady=10)
+
+def track():
+    ctk.CTkLabel(app, text=f"Tracking {entry.get()}...").pack()
+
+
 # define the ChromeDriver service first
 service = Service()  # optional: add executable_path="path/to/chromedriver" if needed
 notifier = ToastNotifier()
-online = False
 obtained = False
 wasOnline = False
+isRunning = False
+closed = False
+statusLabel = ctk.CTkLabel(app, text="asdzxcasda")
 
 # open Chrome
-while True:
-    with webdriver.Chrome(service=service, options=options) as driver:
-        driver.get(f"https://www.chess.com/member/{USERNAME}")
-        print(driver.title)
-        paragraphs = driver.find_elements(By.CLASS_NAME, "profile-header-details-item")
-        obtained = False
-        for p in paragraphs:
-            # doesnt repeat if I already got what I needed
-            if obtained:
-                break
-
-            if p.text.strip().startswith("Last Online"):
-                print(p.text)
-                obtained = True
-                online = False
-                if wasOnline:
-                    notifier.show_toast("Chess Detector Notification", USERNAME + " is no longer online")
-                    wasOnline = False
-            elif p.text.strip().startswith("Online now"):
-                print(p.text)
-                obtained = True
-                online = True
-                if not wasOnline:
-                    notifier.show_toast("Chess Detector Notification", USERNAME + " is " + p.text)
-                wasOnline = True
-            # print(p.text)
-            if obtained:
-                with open("page.html", "a", encoding="utf-8") as f:
-                    f.write(p.text + "\n")
+def mainProgram():
+    # make sure these are global, otherwise python assumes they are local to the function
+    global wasOnline, obtained, isRunning
     
-    for i in range(SLEEP_TIME, 0, -1):
-        sys.stdout.write(f"\rChecking again in {i} seconds...   ")
-        sys.stdout.flush()
-        time.sleep(1)
-    print("\nChecking...")
+    button.configure(state="disabled")
+    
+    if isRunning:
+        return
+    
+    isRunning = True
+    # used to stop the program on command
+    
+    username = entry.get()
+    # ctk.CTkLabel(app, text="Tracking...").pack()
+    
+    tracking.configure(text="Tracking...")
+    tracking.pack()
+    
+    # runs unless its told to stop by an external source
+    while isRunning:
+
+        with webdriver.Chrome(service=service, options=options) as driver:
+            statusLabel.configure(text=f"Tracking {username}...")
+            driver.get(f"https://www.chess.com/member/{username}")
+            print(driver.title)
+            if driver.title == "Missing Page - Chess.com":
+                statusLabel.configure(text="User could not be found")
+            paragraphs = driver.find_elements(By.CLASS_NAME, "profile-header-details-item")
+            obtained = False
+            for p in paragraphs:
+                # doesnt repeat if I already got what I needed
+                if obtained:
+                    break
+
+                if p.text.strip().startswith("Last Online"):
+                    statusLabel.configure(text=p.text)
+                    print(p.text)
+                    obtained = True
+                    if wasOnline:
+                        statusLabel.configure(text=username + " is no longer online")
+                        wasOnline = False
+                elif p.text.strip().startswith("Online now"):
+                    statusLabel.configure(text=p.text)
+                    print(p.text)
+                    obtained = True
+                    if not wasOnline:
+                        notifier.show_toast("Chess Detector Notification", username + " is " + p.text)
+                    wasOnline = True
+                # print(p.text)
+                # if obtained:
+                #     with open("page.html", "a", encoding="utf-8") as f:
+                #         f.write(p.text + "\n")
+        statusLabel.pack()
+        
+        for i in range(SLEEP_TIME, 0, -1):
+            # this program ends it without creating errors if the windows closed
+            if closed:
+                break
+            if not isRunning:
+                tracking.configure(text="")
+                statusLabel.configure(text="")
+                break
+            tracking.configure(text=f"Checking again in {i} seconds...   ")
+            tracking.pack()
+            sys.stdout.write(f"\rChecking again in {i} seconds...   ")
+            sys.stdout.flush()
+            time.sleep(1)
+        print("\nChecking...")
+
+def endLoop():
+    global isRunning
+    isRunning = False
+    tracking.configure(text="")
+    statusLabel.configure(text="")
+    button.configure(state="enabled")
+
+def onClosing():
+    global isRunning, closed
+    closed = True
+    isRunning = False
+    app.destroy()
+
+
+button = ctk.CTkButton(app, text="Start Tracking", command=lambda: threading.Thread(target=mainProgram).start(),
+                       fg_color="#69923e", hover_color="#4e7837")
+button.pack(pady=10)
+
+endbutton = ctk.CTkButton(app, text="End Tracking", command=lambda: threading.Thread(target=endLoop).start(),
+                        fg_color="#4b4847", hover_color="#2c2b29")
+endbutton.pack()
+
+tracking = ctk.CTkLabel(app, text="")
+
+app.protocol("WM_DELETE_WINDOW", onClosing)
+
+app.mainloop()
